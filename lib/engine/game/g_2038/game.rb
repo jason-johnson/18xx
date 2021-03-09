@@ -227,7 +227,7 @@ module Engine
             value: 120,
             revenue: 5,
             desc: 'Buyer recieves a TSI Share.  If owned by a corporation, may place 1 free Base on ANY'\
-            'explored and unclaimed tile.',
+            ' explored and unclaimed tile.',
             abilities: [{ type: 'shares', shares: 'TSI_3' },
                         {
                           type: 'tile_lay',
@@ -244,7 +244,7 @@ module Engine
             value: 140,
             revenue: 10,
             desc: 'Buyer recieves a TSI Share.  If owned by a corporation, may place 1 free'\
-            'Refueling Station within range.',
+            ' Refueling Station within range.',
             abilities: [{ type: 'shares', shares: 'TSI_2' },
                         {
                           type: 'tile_lay',
