@@ -203,6 +203,96 @@ module Engine
           'group_b_corps_available' => ['Group B Corporations become available'],
           'group_c_corps_available' => ['Group C Corporations become available'],
         ).freeze
+        
+        COMPANIES = [
+          {
+            name: 'Planetary Imports',
+            sym: 'PI',
+            value: 50,
+            revenue: 10,
+            desc: 'No special abilities',
+            color: nil,
+          },
+          {
+            name: 'Tunnel Systems',
+            sym: 'TS',
+            value: 120,
+            revenue: 5,
+            desc: 'Buyer recieves a TSI Share.  If owned by a corporation, may place 1 free Base on ANY'\
+            'explored and unclaimed tile.',
+            abilities: [{ type: 'shares', shares: 'TSI_3' },
+                        {
+                          type: 'tile_lay',
+                          owner_type: 'corporation',
+                          tiles: ['1'],
+                          when: 'owning_corp_or_turn',
+                          count: 1,
+                        }],
+            color: nil,
+          },
+          {
+            name: 'Vacuum Associates',
+            sym: 'VA',
+            value: 140,
+            revenue: 10,
+            desc: 'Buyer recieves a TSI Share.  If owned by a corporation, may place 1 free'\
+            'Refueling Station within range.',
+            abilities: [{ type: 'shares', shares: 'TSI_2' },
+                        {
+                          type: 'tile_lay',
+                          owner_type: 'corporation',
+                          tiles: ['2'],
+                          when: 'owning_corp_or_turn',
+                          count: 1,
+                        }],
+            color: nil,
+          },
+          {
+            name: 'Robot Smelters, Inc.',
+            sym: 'RS',
+            value: 160,
+            revenue: 15,
+            desc: 'Buyer recieves a TSI Share.  If owned by a corporation, may place 1 free Claim within range.',
+            abilities: [{ type: 'shares', shares: 'TSI_1' },
+                        {
+                          type: 'tile_lay',
+                          owner_type: 'corporation',
+                          tiles: ['3'],
+                          when: 'owning_corp_or_turn',
+                          count: 1,
+                        }],
+            color: nil,
+          },
+          {
+            name: 'Space Transportation Co.',
+            sym: 'ST',
+            value: 180,
+            revenue: 20,
+            desc: "Buyer recieves TSI president's Share and flies probe if TSI isn't active.  May not be owned"\
+            ' by a corporation. Remove from the game after TSI buys a spaceship.',
+            abilities: [{ type: 'launch', corporation: 'TSI' },
+                        { type: 'no_buy' },
+                        { type: 'close', when: 'bought_train', corporation: 'TSI' },
+                      ],
+            color: nil,
+          },
+          {
+            name: 'Asteroid Export Co.',
+            sym: 'AE',
+            value: 180,
+            revenue: 30,
+            desc: "Forms Asteroid League, receiving its President's certificate.  May not be bought by a"\
+            ' corporation.  Remove from the game after AL aquires a spaceship.',
+            abilities: [{ type: 'close', when: 'bought_train', corporation: 'AL' },
+                        { type: 'no_buy' },
+                        {
+                          type: 'shares',
+                          shares: 'AL_0',
+                          when: ['Phase 3', 'Phase 4'],
+                        }],
+            color: nil,
+          },
+        ].freeze
 
         def init_bank
           return super unless optional_short_game
@@ -333,6 +423,11 @@ module Engine
         def optional_variant_start_pack
           @optional_rules&.include?(:optional_variant_start_pack)
         end
+
+        def optional_short_game
+          @optional_rules&.include?(:optional_short_game)
+        end
+
       end
     end
   end
