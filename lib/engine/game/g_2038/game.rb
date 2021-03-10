@@ -4,6 +4,7 @@ require_relative 'meta'
 require_relative 'map'
 require_relative 'entities'
 require_relative '../base'
+require_relative 'company'
 
 module Engine
   module Game
@@ -422,6 +423,20 @@ module Engine
 
         def optional_variant_start_pack
           @optional_rules&.include?(:optional_variant_start_pack)
+        def init_companies(players)
+          companies = super(players)
+
+          wrapped_companies = game_minors.map { |minor| G2038::Company.new(minor) }
+          companies + wrapped_companies
+        end
+
+        LAYOUT = :pointy
+
+        def new_auction_round
+          Round::Auction.new(self, [
+            Engine::Step::CompanyPendingPar,
+            G2038::Step::WaterfallAuction,
+          ])
         end
 
         def optional_short_game
