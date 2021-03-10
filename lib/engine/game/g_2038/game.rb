@@ -2,6 +2,7 @@
 
 require_relative 'meta'
 require_relative '../base'
+require_relative 'company'
 
 module Engine
   module Game
@@ -559,7 +560,26 @@ module Engine
           end
         end
 
+        def init_companies(players)
+          companies = super(players)
+
+          wrapped_companies = game_minors.map { |minor| G2038::Company.new(minor) }
+          companies + wrapped_companies
+        end
+
         LAYOUT = :pointy
+
+        def new_auction_round
+          Round::Auction.new(self, [
+            Engine::Step::CompanyPendingPar,
+            G2038::Step::WaterfallAuction,
+          ])
+        end
+
+        def optional_short_game
+          @optional_rules&.include?(:optional_short_game)
+        end
+
       end
     end
   end
