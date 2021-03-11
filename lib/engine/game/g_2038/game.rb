@@ -302,6 +302,7 @@ module Engine
         def after_par(corporation)
           super
 
+<<<<<<< HEAD
           return unless @corporations.all?(&:ipoed)
 
           case @available_corp_group
@@ -328,6 +329,25 @@ module Engine
               end
             end
           end
+=======
+        STATUS_TEXT = Base::STATUS_TEXT.merge(
+          'group_a_corps_available' => ['Buy A Corps', 'It is possible only to buy corporations in A group'],
+          'group_b_corps_available' => ['Buy A/B Corps', 'It is possible only to buy corporations in A and B group'],
+          'group_c_corps_available' => ['Buy A/B/C Corps', 'It is possible to buy corporations in A, B and C group'],
+          'can_launch_growth_corps' => ["Launch Growth Corps", 'Independent Corporations may form Growth Corporations'],
+          'can_buy_ics_bases_stations' => ["Buy Privates|ICs|Bases|Refueling", 'Corporations may buy privates, independent claims, bases and refueling stations'],
+          'can_buy_ships' => ["Buy Ships", 'Corporations may buy ships from other corporations'],
+          'al_may_form' => ["AL may form", 'The Asteroid League may be formed'],
+          'al_must_form' => ["AL must form", 'The Asteroid League must be formed'],
+          'ic_must_join_al' => ["ICs join AL", 'Independent Corporations must join the Asteroid League'],
+        ).freeze
+
+        def new_auction_round
+          Round::Auction.new(self, [
+            Engine::Step::CompanyPendingPar,
+            G2038::Step::WaterfallAuction,
+          ])
+>>>>>>> 354eaf2be (Added status text)
         end
 
         def optional_short_game
