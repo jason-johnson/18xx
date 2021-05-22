@@ -24,7 +24,7 @@ module Engine
             actions << 'par' if @bid_actions.zero? && can_ipo_any?(entity) && player_debt.zero?
             actions << 'sell_shares' if can_sell_any?(entity)
             actions << 'bid' if player_debt.zero?
-            actions << 'payoff_player_debt' if player_debt.positive? && entity.cash >= player_debt
+            actions << 'payoff_player_debt' if player_debt.positive? && entity.cash.positive?
             actions << 'pass' unless actions.empty?
             actions
           end
@@ -114,6 +114,12 @@ module Engine
               .select { |p| p.price * share_multiplier <= available_cash }
           end
 
+          def must_sell?(entity)
+            return false unless can_sell_any?(entity)
+
+            @game.num_certs(entity) > @game.cert_limit
+          end
+
           def pass!
             store_bids!
             super
@@ -196,13 +202,10 @@ module Engine
           end
 
           def process_payoff_player_debt(action)
-            entity = action.entity
-
-            player_debt = @game.player_debt(entity)
-            entity.check_cash(player_debt)
-            @log << "#{entity.name} pays off its loan of #{@game.format_currency(player_debt)}"
-
-            @game.payoff_player_loan(entity)
+            player = action.entity
+            @game.payoff_player_loan(player)
+            @round.last_to_act = player
+            @round.current_actions << action
           end
 
           def setup
@@ -241,7 +244,7 @@ module Engine
             super
           end
 
-          def action_is_shenanigan?(entity, action, corporation, share_to_buy)
+          def action_is_shenanigan?(entity, other_entity, action, corporation, share_to_buy)
             # Bid is done in should_stop_applying_program
             return if action.is_a?(Action::Bid)
 

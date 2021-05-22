@@ -50,7 +50,7 @@ module Engine
 
         STARTING_CORPORATIONS_OVERRIDE = {
           '15' => { coordinates: 'N29', city: 1 },
-          '16' => { coordinates: 'M30' },
+          '16' => { coordinates: 'M30', city: 0 },
           '29' => { coordinates: 'E26' },
           'LNWR' => { coordinates: 'N29', city: 0 },
         }.freeze
@@ -262,21 +262,21 @@ module Engine
                 'city=revenue:50,slots:3;path=a:0,b:_0;path=a:1,b:_0;path=a:2,b:_0;path=a:3,b:_0;'\
                 'path=a:4,b:_0;label=BM',
             },
-          '145' =>
+          '768' =>
             {
               'count' => 3,
               'color' => 'brown',
               'code' =>
                 'town=revenue:10;path=a:0,b:_0;path=a:2,b:_0;path=a:3,b:_0;path=a:5,b:_0',
             },
-          '146' =>
+          '767' =>
             {
               'count' => 3,
               'color' => 'brown',
               'code' =>
                 'town=revenue:10;path=a:0,b:_0;path=a:1,b:_0;path=a:2,b:_0;path=a:3,b:_0',
             },
-          '147' =>
+          '769' =>
             {
               'count' => 4,
               'color' => 'brown',
@@ -455,7 +455,7 @@ module Engine
             name: '5P',
             distance: 5,
             num: 1,
-            price: 0,
+            price: 500,
           },
           {
             name: 'P+',

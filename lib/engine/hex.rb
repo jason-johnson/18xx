@@ -7,7 +7,7 @@ module Engine
     include Assignable
 
     attr_accessor :x, :y, :ignore_for_axes, :location_name
-    attr_reader :coordinates, :empty, :layout, :neighbors, :tile, :original_tile
+    attr_reader :coordinates, :empty, :layout, :neighbors, :all_neighbors, :tile, :original_tile
 
     DIRECTIONS = {
       flat: {
@@ -32,7 +32,7 @@ module Engine
     NEGATIVE_LETTERS = [0] + ('a'..'z').to_a
 
     COORD_LETTER = /([A-Za-z]+)/.freeze
-    COORD_NUMBER = /([0-9]+)/.freeze
+    COORD_NUMBER = /(-?[0-9]+)/.freeze
 
     def self.invert(dir)
       (dir + 3) % 6
@@ -70,6 +70,7 @@ module Engine
       @layout = layout
       @x, @y = self.class.init_x_y(@coordinates, axes)
       @neighbors = {}
+      @all_neighbors = {}
       @location_name = location_name
       tile.location_name = location_name
       @original_tile = @tile = tile
@@ -150,6 +151,9 @@ module Engine
         new_city.groups = old_city.groups
       end
 
+      @tile.hex = nil
+      tile.hex = self
+
       # when upgrading, preserve tokens on previous tile (must be handled after
       # reservations are completely done due to OO weirdness)
       city_map.each do |old_city, new_city|
@@ -180,9 +184,6 @@ module Engine
 
       tile.partitions.concat(@tile.partitions)
       @tile.partitions.clear
-
-      @tile.hex = nil
-      tile.hex = self
 
       # give the city/town name of this hex to the new tile; remove it from the
       # old one

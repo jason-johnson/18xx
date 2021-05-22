@@ -13,13 +13,14 @@ module Engine
           ACTIONS = %w[choose_ability].freeze
 
           def actions(entity)
-            # TODO: change to something like this: @game.abilities(entity, :assign_hexes) ||
+            return [] if @round.president_helped
+
             return can_choose_ability?(entity) ? ACTIONS : [] if entity.company?
             return [] unless blocks?
 
             actions = []
-            actions << 'choose_ability' if entity.corporation? && can_choose_any_ability_on_any_step?(entity)
-            actions << 'pass' unless actions.empty?
+            actions << 'choose_ability' if can_choose_any_ability_on_any_step?(entity)
+            actions << 'pass' if blocks?
             actions.uniq
           end
 

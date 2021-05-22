@@ -61,8 +61,12 @@ module View
       end
 
       description = []
-      description += [h(:a, { attrs: { href: '/signup' } }, 'Signup'), ' or ',
-                      h(:a, { attrs: { href: '/login' } }, 'login'), ' to play multiplayer.'] unless @user
+      unless @user
+        description += [
+          h(:a, { attrs: { href: '/signup' } }, 'Signup'), ' or ',
+          h(:a, { attrs: { href: '/login' } }, 'login'), ' to play multiplayer.'
+        ]
+      end
       description << h(:p, 'If you are new to 18xx games then 1889, 18Chesapeake or 18MS are good games to begin with.')
       render_form('Create New Game', inputs, description)
     end
@@ -72,18 +76,21 @@ module View
       @max_p = {}
       closest_title = @title && Engine.closest_title(@title)
 
-      game_options = visible_games.group_by { |game| game::DEV_STAGE }.flat_map do |dev_stage, game_list|
+      game_options = visible_games
+      .group_by { |game| game::DEV_STAGE == :production && game::PROTOTYPE ? :prototype : game::DEV_STAGE }
+      .flat_map do |dev_stage, game_list|
         option_list = game_list.map do |game|
           @min_p[game.title], @max_p[game.title] = game::PLAYER_RANGE
 
           title = game.title
           title += " (#{game::GAME_LOCATION})" if game::GAME_LOCATION
+          title += ' [Prototype]' if game::PROTOTYPE
 
           attrs = { value: game.title }
           attrs[:selected] = (game.title == closest_title) ||
                              (game == Engine.meta_by_title(closest_title)::GAME_IS_VARIANT_OF)
 
-          h(:option, { attrs: attrs }, title)
+          h(:option, { attrs: attrs }, game::GAME_DROPDOWN_TITLE || title)
         end
 
         if dev_stage == :production
@@ -94,7 +101,7 @@ module View
       end
 
       title_change = lambda do
-        @selected_game = Engine::GAME_META_BY_TITLE[Native(@inputs[:title]).elm&.value]
+        @selected_game = Engine.meta_by_title(Native(@inputs[:title]).elm&.value)
 
         uncheck_game_variant
         @selected_variant = nil
@@ -315,7 +322,7 @@ module View
 
       params['title'] = @selected_variant[:title] if @selected_variant
 
-      game = Engine::GAME_META_BY_TITLE[params['title']]
+      game = Engine.meta_by_title(params['title'])
       params[:optional_rules] = game::OPTIONAL_RULES
                                   .map { |o_r| o_r[:sym] }
                                   .select { |rule| params.delete(rule) }
@@ -342,7 +349,7 @@ module View
         end
       end
 
-      @selected_game = Engine::GAME_META_BY_TITLE[title]
+      @selected_game = Engine.meta_by_title(title)
     end
 
     def selected_game_or_variant

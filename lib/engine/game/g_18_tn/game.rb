@@ -524,10 +524,12 @@ module Engine
 
         def operating_round(round_num)
           # For OR 1, set company buy price to face value only
-          @companies.each do |company|
-            company.min_price = company.value
-            company.max_price = company.value
-          end if @turn == 1
+          if @turn == 1
+            @companies.each do |company|
+              company.min_price = company.value
+              company.max_price = company.value
+            end
+          end
 
           # After OR 1, the company buy price is changed to 50%-150%
           setup_company_price_50_to_150_percent if @turn == 2 && round_num == 1
@@ -612,7 +614,7 @@ module Engine
           @lnr ||= company_by_id('LNR')
         end
 
-        def upgrades_to?(from, to, special = false)
+        def upgrades_to?(from, to, _special = false, selected_company: nil)
           # When upgrading from green to brown:
           #   If Memphis (H3), Chattanooga (H15), Nashville (F11)
           #   only brown P tile (#170) are allowed.
@@ -624,13 +626,13 @@ module Engine
           super
         end
 
-        def all_potential_upgrades(tile, tile_manifest: false)
+        def all_potential_upgrades(tile, tile_manifest: false, selected_company: nil)
           upgrades = super
 
           return upgrades unless tile_manifest
 
           # Tile manifest for yellow standard cities should show N tile (TN1) as an option
-          upgrades |= [@green_nashville_tile] if is_green_nashville_upgrade?(tile)
+          upgrades |= [@green_nashville_tile] if green_nashville_upgrade?(tile)
 
           # Tile manifest for green cities should show P tile as an option
           upgrades |= [@brown_p_tile] if @brown_p_tile && GREEN_CITY_TILES.include?(tile.name)

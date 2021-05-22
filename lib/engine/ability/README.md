@@ -21,6 +21,10 @@ These attributes may be set for all ability types
 - `count_per_or`: The number of times the ability may be used in each OR; the
   property `count_this_or` is reset to 0 at the start of each OR and increments
   each time the ability is used
+- `use_across_ors`: If `count` is more than 1 and this is `false`, then the
+  ability may only be used within one OR; if an OR starts and the ability has
+  been used at least once, but there is still `count` remaining, the ability
+  gets used up and removed. Default `true`.
 - `on_phase`: The phase when this ability is active
 - `when`: (string or array of strings) The game steps or special time descriptor
   when this ability is active. If no values are provided, this ability is
@@ -38,6 +42,8 @@ These attributes may be set for all ability types
       used with `close` abilities
     - `owning_corp_or_turn`: usable at any point during the owning corporation's OR turn
     - `owning_player_or_turn`: usable at any point during any of the owning player's OR turns
+    - `owning_player_sr_turn`: usable at any point during any of the owning player's
+    SR turns
     - `or_between_turns`: usable at the start of any corporation's OR turn,
       before that corporation has acted
     - `stock_round`: usable any time during a Stock Round
@@ -91,6 +97,12 @@ corporation.
 
 - `partition_type`: The name of the partition type that is to be
   blocked, akin to terrain and border types.
+
+## borrow_train
+
+May borrow a train from the Depot for running trains when trainless
+
+- `train_types`: Array of train types that are eligible for borrowing
 
 ## close
 
@@ -217,6 +229,9 @@ remains open but the discount can no longer be used. Default false.
 - `must_lay_all`: If true and `count` is greater than 1 and `must_lay_together`
   is true, all the tile lays must be used; if false, then some tile lays may be
   forfeited. Default false.
+- `consume_tile_lay`: If true, using this private counts as a corporations tile lay
+  and must follow lay/upgrade rules. Upgrade's also count towards the corporations 'upgrade' lays.
+  Default false.
 
 ## train_buy
 
@@ -232,7 +247,7 @@ Discount the train buy cost. The `count` attribute specify how many times the di
 - `discount`: Discount amount. If > 1 this is an absolute amount. If 0 < amount < 1 it is the fraction, e.g. 0.75 is a 75% discount.
 - `trains`: An array of all train names that the discount applies to.
 - `closed_when_used_up`: This ability has a count that is decreased each time it is used. If this attribute is true the private is closed when count reaches zero, if false the private
-remains open but the discount can no longer be used. Default true.
+remains open but the discount can no longer be used. Default false.
 
 ## train_limit
 
@@ -247,11 +262,17 @@ For performance reasons, the supporting code needs to be added directly to the g
 Modified station token placement
 
 - `hexes`: Array of hex coordinates where this ability may be used
+- `city`: Index of the city on the hex where this ability may be used, if
+  multiple cities are there
 - `price`: Price for placing token
 - `teleport_price`: If present, this ability may be used to place a
   token without connectivity, for the given price.
-- `extra`: If true, this ability may be used in addition to the turn's
+- `discount`: ratio discount from the normal price, e.g., `0.25` takes 25% off
+  the token price
+- `extra_action`: If true, this ability may be used in addition to the turn's
   normal token placement step. Default false.
+- `from_owner`: If true, this ability uses a token from the owning corporation's
+  charter; if false, an additional token is created. Default false.
 - `cheater`: If an integer is given, this token will be placed into a city at
   whichever is the lowest unoccupied slot index of the following: a regular slot
   in the city; the `cheater` value; one slot higher than the city actually has,
@@ -269,6 +290,8 @@ Modified station token placement
   step); if unset or false, `Engine::Step::Tokener#adjust_token_price_ability!`
   infers that the special ability ought to be used whenever a token is being
   placed in a location that the ability is allowed to use. Default false.
+- `neutral`: If true, this ability uses a "neutral" token, which allows all
+  corporations to pass through it
 
 
 ## sell_company

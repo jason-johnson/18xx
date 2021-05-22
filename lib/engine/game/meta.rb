@@ -6,6 +6,7 @@ module Engine
       # platform-relevant metadata
       DEV_STAGES = %i[production beta alpha prealpha].freeze
       DEV_STAGE = :prealpha
+      PROTOTYPE = false
       DEPENDS_ON = nil
 
       # real game metadata
@@ -18,9 +19,11 @@ module Engine
       GAME_TITLE = nil
       GAME_SUBTITLE = nil
       GAME_SUPERTITLE = nil
+      GAME_FULL_TITLE = nil
       GAME_ALIASES = [].freeze
       GAME_VARIANTS = [].freeze
       GAME_IS_VARIANT_OF = nil
+      GAME_DROPDOWN_TITLE = nil
 
       # rules data that needs to be known to the engine without loading in the
       # full game class
@@ -44,13 +47,15 @@ module Engine
             begin
               parts = name.split('::')
               last = parts.last
-              part = (last == 'Game' || last == 'Meta' ? parts[-2] : last)
+              part = (%w[Game Meta].include?(last) ? parts[-2] : last)
               part.slice(1..-1)
             end
         end
 
         def full_title
-          [self::GAME_SUPERTITLE, title, self::GAME_SUBTITLE].compact.join(': ')
+          @full_title ||=
+            self::GAME_FULL_TITLE ||
+            [self::GAME_SUPERTITLE, title, self::GAME_SUBTITLE].compact.join(': ')
         end
 
         def fs_name
@@ -58,7 +63,7 @@ module Engine
             begin
               parts = name.split('::')
               last = parts.last
-              part = (last == 'Game' || last == 'Meta' ? parts[-2] : last)
+              part = (%w[Game Meta].include?(last) ? parts[-2] : last)
               part.sub(/^G/, 'g_').gsub(/(.)([A-Z]+)/, '\1_\2').downcase
             end
         end
@@ -73,7 +78,7 @@ module Engine
 
         def game_variants
           @game_variants ||= self::GAME_VARIANTS.map do |v|
-            [v[:sym], v.merge({ meta: GAME_META_BY_TITLE[v[:title]] })]
+            [v[:sym], v.merge({ meta: Engine.meta_by_title(v[:title]) })]
           end.to_h
         end
       end

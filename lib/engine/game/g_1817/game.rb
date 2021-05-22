@@ -261,6 +261,9 @@ module Engine
               when: 'track',
               owner_type: 'corporation',
               count: 1,
+              consume_tile_lay: true,
+              closed_when_used_up: true,
+              special: true,
             },
           ],
             color: nil,
@@ -377,7 +380,10 @@ module Engine
                           I10],
                 tiles: %w[7 8 9],
                 free: false,
-                when: 'owning_corp_or_turn',
+                when: 'track',
+                discount: 15,
+                consume_tile_lay: true,
+                closed_when_used_up: true,
                 owner_type: 'corporation',
                 count: 1,
               },
@@ -411,7 +417,10 @@ module Engine
                           I10],
                 tiles: %w[7 8 9],
                 free: false,
-                when: 'owning_corp_or_turn',
+                when: 'track',
+                discount: 15,
+                consume_tile_lay: true,
+                closed_when_used_up: true,
                 owner_type: 'corporation',
                 count: 2,
               },
@@ -445,7 +454,10 @@ module Engine
                           I10],
                 tiles: %w[7 8 9],
                 free: false,
-                when: 'owning_corp_or_turn',
+                when: 'track',
+                discount: 15,
+                consume_tile_lay: true,
+                closed_when_used_up: true,
                 owner_type: 'corporation',
                 count: 3,
               },
@@ -883,13 +895,14 @@ module Engine
         ALL_COMPANIES_ASSIGNABLE = true
         SELL_AFTER = :after_ipo
         OBSOLETE_TRAINS_COUNT_FOR_LIMIT = true
+        BANKRUPTCY_ENDS_GAME_AFTER = :all_but_one
 
         ASSIGNMENT_TOKENS = {
           'bridge' => '/icons/1817/bridge_token.svg',
           'mine' => '/icons/1817/mine_token.svg',
         }.freeze
 
-        GAME_END_CHECK = { bankrupt: :immediate, custom: :one_more_full_or_set }.freeze
+        GAME_END_CHECK = { bankrupt: :immediate, final_phase: :one_more_full_or_set }.freeze
 
         CERT_LIMIT_CHANGE_ON_BANKRUPTCY = true
 
@@ -967,10 +980,6 @@ module Engine
         def init_stock_market
           @owner_when_liquidated = {}
           super
-        end
-
-        def bankruptcy_limit_reached?
-          @players.reject(&:bankrupt).one?
         end
 
         def init_loans
@@ -1359,6 +1368,28 @@ module Engine
           @stock_market.move(corporation, 0, 0, force: true)
         end
 
+        def train_help(_entity, _runnable_trains, routes)
+          all_hexes = {}
+          @companies.each do |company|
+            abilities(company, :assign_hexes)&.hexes&.each do |hex|
+              all_hexes[hex] = company
+            end
+          end
+          warnings = []
+          unless hexes.empty?
+
+            routes.each do |route|
+              route.stops.each do |stop|
+                if (company = all_hexes[stop.hex.id])
+                  warnings << "Using #{company.name} on #{stop.hex.id} will improve revenue"
+                end
+              end
+            end
+          end
+
+          warnings
+        end
+
         def revenue_for(route, stops)
           revenue = super
 
@@ -1506,10 +1537,6 @@ module Engine
 
         def round_end
           G1817::Round::Acquisition
-        end
-
-        def custom_end_game_reached?
-          @final_operating_rounds
         end
 
         def final_operating_rounds

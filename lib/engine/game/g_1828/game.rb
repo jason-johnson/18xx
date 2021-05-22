@@ -449,9 +449,9 @@ module Engine
             name: 'Cobourg & Peterborough Railway',
             value: 80,
             revenue: 15,
-            desc: 'Blocks/reserves Peterborough (C15) while owned by a player. Revenue $0 after auction completes. ' \
+            desc: 'Blocks/reserves Peterborough (C15) while owned by a player. ' \
                   'Owning player may place or upgrade track tiles on a route connected to Peterborough (C15). ' \
-                  'Half-pays the revenue of a 2-train route from that track tile.',
+                  'Half-pays the revenue of a 2-train route from that track tile instead of normal revenue.',
             sym: 'C&P',
             abilities: [{ type: 'blocks_hexes', owner_type: 'player', hexes: ['C15'] },
                         { type: 'revenue_change', revenue: 0, when: 'auction_end' }],
@@ -921,7 +921,11 @@ module Engine
 
         TILE_RESERVATION_BLOCKS_OTHERS = true
 
-        GAME_END_CHECK = { bankrupt: :immediate, stock_market: :current_round, custom: :one_more_full_or_set }.freeze
+        GAME_END_CHECK = {
+          bankrupt: :immediate,
+          stock_market: :current_round,
+          final_phase: :one_more_full_or_set,
+        }.freeze
 
         SELL_BUY_ORDER = :sell_buy_sell
 
@@ -1041,6 +1045,8 @@ module Engine
           tile_lays = super
           tile_lays += [{ lay: true, upgrade: :not_if_upgraded, cannot_reuse_same_hex: true }] if entity.system?
           (entity.system? ? entity.corporations.map(&:name) : [entity.name]).each do |corp_name|
+            next unless EXTRA_TILE_LAY_CORPS.include?(corp_name)
+
             tile_lays += [
               {
                 lay: :not_if_upgraded,
@@ -1048,13 +1054,13 @@ module Engine
                 cannot_reuse_same_hex: true,
                 cost: 40,
               },
-            ] if EXTRA_TILE_LAY_CORPS.include?(corp_name)
+            ]
           end
 
           tile_lays
         end
 
-        def can_hold_above_limit?(_entity)
+        def can_hold_above_corp_limit?(_entity)
           true
         end
 
@@ -1103,10 +1109,6 @@ module Engine
           @log << 'Unparred corporations will be removed at the beginning of the next stock round'
         end
 
-        def custom_end_game_reached?
-          @phase.current[:name] == 'Purple'
-        end
-
         def new_stock_round
           new_sr = super
           remove_unparred_corporations! if @phase.current[:name] == 'Purple'
@@ -1134,7 +1136,7 @@ module Engine
           @round.force_next_entity! if @round.current_entity == minor
         end
 
-        def upgrades_to?(from, to, special = false)
+        def upgrades_to?(from, to, _special = false, selected_company: nil)
           # Virginia tunnel can only be upgraded to #4 tile
           return false if from.hex.id == VA_TUNNEL_HEX && to.name != '4'
 
@@ -1412,6 +1414,7 @@ module Engine
             train.buyable = false
             train.rusts_on = nil
             buy_train(minor, train, :free)
+            @depot.forget_train(train)
             hex = hex_by_id(minor.coordinates)
             hex.tile.cities[0].place_token(minor, minor.next_token, free: true)
           end
@@ -1450,7 +1453,7 @@ module Engine
           return unless @players.size < 5
 
           to_remove = @depot.trains.reverse.find { |train| train.name == '6' }
-          @depot.remove_train(to_remove)
+          @depot.forget_train(to_remove)
           @log << "Removing #{to_remove.name} train"
         end
 

@@ -22,8 +22,11 @@ module View
         needs :show_other_players, default: nil, store: true
 
         def render
-          @step = @game.round.active_step
-          @current_actions = @step.current_actions
+          round = @game.round
+          @step = round.active_step
+          entity = @step.current_entity
+          @current_actions = round.actions_for(entity)
+
           @auctioning_corporation = @step.auctioning_corporation if @step.respond_to?(:auctioning_corporation)
           @selected_corporation ||= @auctioning_corporation
           @mergeable_entity = @step.mergeable_entity if @step.respond_to?(:mergeable_entity)
@@ -139,7 +142,13 @@ module View
 
           merging = @step.respond_to?(:merge_in_progress?) && @step.merge_in_progress?
 
-          @game.sorted_corporations.reject(&:closed?).map do |corporation|
+          corporations = if @step.respond_to?(:visible_corporations)
+                           @step.visible_corporations
+                         else
+                           @game.sorted_corporations.reject(&:closed?)
+                         end
+
+          corporations.map do |corporation|
             next if @auctioning_corporation && @auctioning_corporation != corporation
             next if @mergeable_entity && @mergeable_entity != corporation
             next if @price_protection && @price_protection.corporation != corporation
@@ -163,7 +172,9 @@ module View
             corporation.ipoed ? h(BuySellShares, corporation: corporation) : render_pre_ipo(corporation),
             render_loan(corporation),
           ]
-          inputs << h(IssueShares, entity: corporation) if @step.actions(corporation).include?('buy_shares')
+          unless (@step.actions(corporation) & %w[buy_shares sell_shares]).empty?
+            inputs << h(IssueShares, entity: corporation)
+          end
           inputs << h(BuyTrains, corporation: corporation) if @step.actions(corporation).include?('buy_train')
           inputs = inputs.compact
           h('div.margined_bottom', { style: { width: '20rem' } }, inputs) if inputs.any?
@@ -267,8 +278,9 @@ module View
           @step.sellable_companies(@current_entity).map do |company|
             children = []
             children << h(Company, company: company)
-            children << h('div.margined_bottom', { style: { width: '20rem' } },
-                          render_sell_input(company)) if @selected_company == company
+            if @selected_company == company
+              children << h('div.margined_bottom', { style: { width: '20rem' } }, render_sell_input(company))
+            end
             h(:div, props, children)
           end
         end

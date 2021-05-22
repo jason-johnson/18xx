@@ -54,8 +54,20 @@ module View
             radius -= 4
           end
 
-          children = [h(:circle, attrs: { r: @radius, fill: color })]
+          token_attrs = {
+            r: @radius,
+            fill: color,
+          }
+
+          if (highlight = @game&.highlight_token?(@token))
+            radius -= 3
+            token_attrs[:stroke] = 'white'
+            token_attrs[:'stroke-width'] = '3px'
+          end
+
+          children = [h(:circle, attrs: token_attrs)]
           children << reservation if @reservation && !@token
+          children << render_boom if @city&.boom
           children << h(Token, token: @token, radius: radius, game: @game) if @token
 
           props = {
@@ -63,7 +75,10 @@ module View
             attrs: { transform: '' },
           }
           props[:attrs][:transform] = rotation_for_layout if @edge
-          if @extra_token
+          if highlight
+            # make it look like an extra tall token
+            props[:attrs][:filter] = 'drop-shadow(8px 8px 2px #444)'
+          elsif @extra_token
             props[:attrs][:transform] += ' scale(0.95)'
             props[:attrs][:filter] = 'drop-shadow(0 0 6px #000)'
           end
@@ -118,18 +133,18 @@ module View
             # If there's a choice of tokens of different types show the selector, otherwise just place
             next_tokens = step.available_tokens(entity)
             if next_tokens.size == 1 && actions.include?('place_token')
-              entity = @selected_company || @game.current_entity
-              tokener = @selected_company&.owned_by_player? ? @game.current_entity : nil
-              slot = cheater || @slot_index
-              token_type = next_tokens[0].type
-              token = (tokener || entity).find_token_by_type(token_type&.to_sym)
               action = Engine::Action::PlaceToken.new(
-                entity,
+                @selected_company || @game.current_entity,
                 city: @city,
-                tokener: tokener,
-                cost: step.token_cost_override(entity, @city, slot, token),
-                slot: slot,
-                token_type: token_type
+                tokener: @selected_company&.owned_by_player? ? @game.current_entity : nil,
+                slot: cheater || @slot_index,
+                token_type: next_tokens[0].type,
+              )
+              action.cost = step.token_cost_override(
+                action.entity,
+                action.city,
+                action.slot,
+                action.token,
               )
               store(:selected_company, nil, skip: true)
               process_action(action)
@@ -142,6 +157,16 @@ module View
                     Lib::TokenSelector.new(@tile.hex, coords, @city, @slot_index))
             end
           end
+        end
+
+        def render_boom
+          h(:circle, attrs: {
+              transform: translate.to_s,
+              stroke: @color,
+              r: @boom_radius ||= 10 * (0.8 + route_prop(0, :width).to_i / 40),
+              'stroke-width': 2,
+              'stroke-dasharray': 6,
+            })
         end
       end
     end

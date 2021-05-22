@@ -253,8 +253,8 @@ module Engine
           end
 
           def combine_ipo_shares
-            @merger.shares_of(@merger).dup.each { |s| s.transfer(@ipo) }
-            @target.shares_of(@target).dup.each { |s| s.transfer(@ipo) }
+            @merger.shares.dup.each { |s| s.transfer(@ipo) }
+            @target.shares.dup.each { |s| s.transfer(@ipo) }
           end
 
           def exchange_pairs(entity)
@@ -326,15 +326,10 @@ module Engine
             merger_share = entity.shares_of(@merger).reject(&:president).first
             target_share = entity.shares_of(@target).reject(&:president).first
 
-            num_system_shares = total_shares / 2
             if @player_selection
-              @odd_share = @merger.name.include?(@player_selection) ? merger_share : target_share
+              @odd_share = @player_selection.include?(@merger.name) ? merger_share : target_share
               @player_selection = nil
-            elsif !merger_share || entity.num_shares_of(@merger) <= num_system_shares
-              @odd_share = target_share
-            elsif !target_share
-              @odd_share = merger_share
-            elsif entity.player?
+            elsif entity.player? && merger_share && target_share
               choices = merging_corporations.map do |c|
                 "#{c.name} (#{@game.format_currency(c.share_price.price)})"
               end
@@ -343,7 +338,7 @@ module Engine
                                                 choices: choices)
               nil
             else
-              @odd_share = entity.shares_of(@merger).first
+              @odd_share = merger_share || target_share
             end
           end
 
@@ -354,7 +349,7 @@ module Engine
           def exchange_singles(entity)
             return if entity.num_shares_of(@merger).zero? && entity.num_shares_of(@target).zero?
 
-            if @player_selection
+            if !@exchange_selection && @player_selection
               @exchange_selection = @player_selection
               @player_selection = nil
             end
@@ -386,8 +381,7 @@ module Engine
               return discard_shares(entity) unless from
 
               # Execute trade to get share(s) needed for the exchange
-              trade_share(entity, [share], from,
-                          from.shares_of(@merger).reject(&:president).take(1)) if from != entity
+              trade_share(entity, [share], from, from.shares_of(@merger).reject(&:president).take(1)) if from != entity
 
               # Exchange the share and pay the difference in cost
               payment_msg = ''
@@ -411,8 +405,7 @@ module Engine
             if @player_selection
               source = @players.find { |p| p.name == @player_selection }
               @player_selection = nil
-            elsif entity.num_shares_of(@merger) >= num_needed &&
-                  [@merger, @target].sum { |c| entity.num_shares_of(c) } >= num_needed * 2
+            elsif entity.num_shares_of(@merger) >= num_needed
               source = entity
             else
               sources = [@discard, @players[1..-1], @merger, @game.share_pool].flatten.compact.select do |src|

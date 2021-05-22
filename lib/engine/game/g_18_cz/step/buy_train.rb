@@ -23,12 +23,12 @@ module Engine
             trains = trains.reject { |item| @game.variant_is_rusted?(item) }
 
             default_trains = trains.select do |item|
-              @game.train_of_size?(item, :small) && (entity.type == :small || entity.cash >= item[:price])
+              @game.train_of_size?(item, :small) && (entity.type == :small || can_afford?(entity, item, train))
             end
             return default_trains if entity.type == :small
 
             medium_trains = trains.select do |item|
-              @game.train_of_size?(item, :medium) && (entity.type == :medium || entity.cash >= item[:price])
+              @game.train_of_size?(item, :medium) && (entity.type == :medium || can_afford?(entity, item, train))
             end
             if entity.type == :medium
               return medium_trains if entity.trains.none? do |item|
@@ -40,10 +40,15 @@ module Engine
 
             large_trains = trains.select { |item| @game.train_of_size?(item, :large) }
 
-            large_trains if entity.trains.none? do |item|
+            return large_trains if entity.trains.none? do |item|
               @game.train_of_size?(item, :large)
             end && room_for_only_one?(entity)
+
             default_trains.concat(medium_trains).concat(large_trains)
+          end
+
+          def can_afford?(entity, variant, train)
+            entity.cash >= variant[:price] || train.owner != @game.depot
           end
 
           def room_for_only_one?(entity)

@@ -109,10 +109,16 @@ module Engine
 
       def buyable_trains(entity)
         depot_trains = @depot.depot_trains
-        other_trains = @depot.other_trains(entity)
+        other_trains = @game.class::ALLOW_TRAIN_BUY_FROM_OTHERS ? @depot.other_trains(entity) : []
 
         if entity.cash < @depot.min_depot_price
           depot_trains = [@depot.min_depot_train] if @game.class::EBUY_DEPOT_TRAIN_MUST_BE_CHEAPEST
+
+          if @game.class::EBUY_SELL_MORE_THAN_NEEDED_LIMITS_DEPOT_TRAIN
+            depot_trains.reject! do |t|
+              t.price < spend_minmax(entity, t).first
+            end
+          end
 
           if @last_share_sold_price
             if @game.class::EBUY_OTHER_VALUE

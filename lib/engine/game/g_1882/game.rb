@@ -291,6 +291,7 @@ module Engine
                 teleport_price: 0,
                 when: 'owning_corp_or_turn',
                 count: 1,
+                from_owner: true,
               },
               {
                 type: 'tile_lay',
@@ -519,10 +520,11 @@ module Engine
             'border=edge:4,type:water,cost:40',
             ['F12'] => 'path=a:1,b:3',
           },
-          blue: { ['B6'] =>
-            'offboard=revenue:yellow_20|brown_30,visit_cost:0,route:optional;'\
-            'path=a:0,b:_0;path=a:1,b:_0;icon=image:1882/fish',
-   },
+          blue: {
+            ['B6'] =>
+                        'offboard=revenue:yellow_20|brown_30,visit_cost:0,route:optional;'\
+                        'path=a:0,b:_0;path=a:1,b:_0;icon=image:1882/fish',
+          },
         }.freeze
 
         LAYOUT = :flat
@@ -592,6 +594,7 @@ module Engine
           train.events, first.events = first.events.partition { |e| e['type'] != 'nwr' }
 
           @log << "#{corporation.name} adds an extra #{train.name} train to the depot"
+          train.reserved = false
           @depot.unshift_train(train)
         end
 
@@ -606,6 +609,7 @@ module Engine
             train = depot.upcoming.reverse.find { |t| t.name == train_name }
             @sc_reserve_trains << train
             depot.remove_train(train)
+            train.reserved = true
           end
 
           # Due to SC adding an extra train this isn't quite a phase change, so the event needs to be tied to a train.
@@ -719,6 +723,10 @@ module Engine
 
         def token_note
           'N = neutral token'
+        end
+
+        def token_ability_from_owner_usable?(_ability, _corporation)
+          true
         end
       end
     end

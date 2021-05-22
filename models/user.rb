@@ -3,6 +3,7 @@
 require_relative 'base'
 require_relative '../assets/app/lib/settings'
 require 'argon2'
+require 'uri'
 
 class User < Base
   one_to_many :games
@@ -16,20 +17,18 @@ class User < Base
       "r#{index}_#{prop}"
     end
   end + %w[
-    consent notifications red_logo bg font bg2 font2 your_turn hotseat_game
-    white yellow green brown gray red blue
+    consent notifications webhook webhook_url webhook_user_id red_logo bg font bg2 font2 your_turn hotseat_game
+    white yellow green brown gray red blue purple
   ]).freeze
 
   def update_settings(params)
-    if params['name']
-      self.name = params['name']
-      raise 'Name cannot be empty' if name.empty?
-
-    end
-
+    self.name = params['name'] if params['name']
+    self.email = params['email'] if params['email']
     params.each do |key, value|
       settings[key] = value if SETTINGS.include?(key)
     end
+
+    settings.delete('webhook_url') if settings['webhook'] != 'custom'
   end
 
   def self.by_email(email)
@@ -67,5 +66,26 @@ class User < Base
 
   def inspect
     "#{self.class.name} - id: #{id} name: #{name}"
+  end
+
+  def validate
+    super
+    validates_unique(:name, :email, { message: 'is already registered' })
+    validates_format /^.+$/, :name, message: 'may not be empty'
+    validates_format /^[^\s].*$/, :name, message: 'may not start with a whitespace'
+    validates_format /^[^@\s]+@[^@\s]+\.[^@\s]+$/, :email
+
+    if settings['webhook'] && (
+        (settings['webhook_user_id']&.strip || '') == '' ||
+        settings['webhook_user_id']&.include?(' ')
+      )
+      errors.add(:webhook_user_id, 'spaces are not allowed in the user id. look at the wiki for more info')
+    end
+
+    # rubocop:disable Style/GuardClause
+    if (url = settings['webhook_url']) && !/slack|discord/.match?(URI.parse(url).host)
+      errors.add(:webhook_url, 'only supports Slack and Discord, let us know if you want others')
+    end
+    # rubocop:enable Style/GuardClause
   end
 end

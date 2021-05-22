@@ -10,6 +10,8 @@ module Engine
       class Game < Game::Base
         include_meta(G1870::Meta)
 
+        attr_accessor :sell_queue, :connection_run, :reissued
+
         register_colors(black: '#37383a',
                         orange: '#f48221',
                         brightGreen: '#76a042',
@@ -41,8 +43,8 @@ module Engine
           '2' => 1,
           '3' => 3,
           '4' => 6,
-          '5' => 5,
-          '6' => 5,
+          '5' => 2,
+          '6' => 2,
           '7' => 9,
           '8' => 22,
           '9' => 23,
@@ -129,10 +131,10 @@ module Engine
         }.freeze
 
         MARKET = [
-          %w[64y 68 72 76 82 90 100p 110 120 140 160 180 200 225 250 285 300 325 350 375 400],
-          %w[60y 64y 68 72 76 82 90p 100 110 120 140 160 180 200 225 250 285 300 325 350 375],
-          %w[55y 60y 64y 68 72 76 82p 90 100 110 120 140 160 180 200 225 250i 285i 300i 325i 350i],
-          %w[50o 55y 60y 64y 68 72 76p 82 90 100 110 120 140 160i 180i 200i 225i 250i 285i 300i 325i],
+          %w[64y 68 72 76 82 90 100p 110 120 140 160 180 200 225 250 275 300 325 350 375 400],
+          %w[60y 64y 68 72 76 82 90p 100 110 120 140 160 180 200 225 250 275 300 325 350 375],
+          %w[55y 60y 64y 68 72 76 82p 90 100 110 120 140 160 180 200 225 250i 275i 300i 325i 350i],
+          %w[50o 55y 60y 64y 68 72 76p 82 90 100 110 120 140 160i 180i 200i 225i 250i 275i 300i 325i],
           %w[40b 50o 55y 60y 64 68 72p 76 82 90 100 110i 120i 140i 160i 180i],
           %w[30b 40o 50o 55y 60y 64 68p 72 76 82 90i 100i 110i],
           %w[20b 30b 40o 50o 55y 60y 64 68 72 76i 82i],
@@ -287,7 +289,7 @@ module Engine
             abilities: [
               {
                 type: 'assign_hexes',
-                hexes: %w[B9 B11 D5 E12 F5 H13 J3 J5 L11 M2 M14 N7],
+                hexes: %w[B9 B11 D5 E12 F5 H13 J3 J5 L11 M2 M6 N7],
                 when: 'owning_corp_or_turn',
                 count: 1,
                 owner_type: 'corporation',
@@ -564,8 +566,13 @@ module Engine
         STOCKMARKET_COLORS = Base::STOCKMARKET_COLORS.merge(unlimited: :green, par: :white,
                                                             ignore_one_sale: :red).freeze
 
-        EVENTS_TEXT = Base::EVENTS_TEXT.merge('remove_tokens' => ['Remove Tokens',
-                                                                  'Remove private company tokens']).freeze
+        MULTIPLE_BUY_ONLY_FROM_MARKET = true
+
+        EVENTS_TEXT = Base::EVENTS_TEXT.merge(
+          'companies_buyable' => ['Companies become buyable', 'All companies may now be bought in by corporation'],
+          'remove_tokens' => ['Remove Tokens', 'Remove private company tokens']
+        ).freeze
+
         MARKET_TEXT = Base::MARKET_TEXT.merge(
           ignore_one_sale: 'Can only enter when 2 shares sold at the same time'
         ).freeze
@@ -582,6 +589,13 @@ module Engine
           'GSCᶜ' => '/icons/1870/GSC_closed.svg',
           'SCC' => '/icons/1870/SCC.svg',
         }.freeze
+
+        def new_auction_round
+          Engine::Round::Auction.new(self, [
+            G1870::Step::CompanyPendingPar,
+            Engine::Step::WaterfallAuction,
+          ])
+        end
 
         def stock_round
           G1870::Round::Stock.new(self, [
@@ -607,7 +621,7 @@ module Engine
             Engine::Step::Route,
             G1870::Step::Dividend,
             Engine::Step::DiscardTrain,
-            Engine::Step::BuyTrain,
+            G1870::Step::BuyTrain,
             [G1870::Step::BuyCompany, { blocks: true }],
             G1870::Step::PriceProtection,
             G1870::Step::CheckConnection,
@@ -623,8 +637,8 @@ module Engine
           'Treasury'
         end
 
-        def setup
-          river_company.max_price = river_company.value
+        def init_hexes(companies, corporations)
+          hexes = super
 
           @corporations.each do |corporation|
             ability = abilities(corporation, :assign_hexes)
@@ -633,6 +647,16 @@ module Engine
             hex.assign!(corporation)
             ability.description = "Destination: #{hex.location_name} (#{hex.name})"
           end
+
+          hexes
+        end
+
+        def setup
+          @sell_queue = []
+          @connection_run = {}
+          @reissued = {}
+
+          river_company.max_price = river_company.value
         end
 
         def event_companies_buyable!
@@ -696,7 +720,7 @@ module Engine
           []
         end
 
-        def can_hold_above_limit?(_entity)
+        def can_hold_above_corp_limit?(_entity)
           true
         end
 
@@ -741,13 +765,25 @@ module Engine
           destination_stop.route_revenue(route.phase, route.train)
         end
 
-        # rubocop:disable Lint/UnusedMethodArgument
         def sell_shares_and_change_price(bundle, allow_president_change: true, swap: nil)
-          @round.sell_queue << [bundle, bundle.corporation.owner]
+          @sell_queue << [bundle, bundle.corporation.owner]
 
           @share_pool.sell_shares(bundle)
         end
-        # rubocop:enable Lint/UnusedMethodArgument
+
+        def num_certs(entity)
+          entity.shares.sum do |s|
+            next 0 unless s.corporation.counts_for_limit
+            next 0 unless s.counts_for_limit
+            # Don't count shares that have been sold and will go to yellow unless protected
+            next 0 if @sell_queue.any? do |bundle, _|
+              bundle.corporation == s.corporation &&
+                !stock_market.find_share_price(s.corporation, Array.new(bundle.num_shares, :up)).counts_for_limit
+            end
+
+            s.cert_size
+          end + entity.companies.size
+        end
 
         def legal_tile_rotation?(_entity, hex, tile)
           return true unless abilities(river_company, :blocks_partition)
@@ -760,7 +796,7 @@ module Engine
             end
         end
 
-        def upgrades_to?(from, to, _special = false)
+        def upgrades_to?(from, to, _special = false, selected_company: nil)
           return false if to.name == '171K' && from.hex.name != 'B11'
           return false if to.name == '172L' && from.hex.name != 'C18'
 
@@ -788,6 +824,10 @@ module Engine
           end
 
           raise GameError, 'At least one train has to run from the home station to the destination'
+        end
+
+        def reissued?(corporation)
+          @reissued[corporation]
         end
       end
     end

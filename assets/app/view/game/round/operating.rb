@@ -4,8 +4,10 @@ require 'view/game/acquire_companies'
 require 'view/game/buy_companies'
 require 'view/game/special_buy'
 require 'view/game/buy_trains'
+require 'view/game/borrow_train'
 require 'view/game/convert'
 require 'view/game/switch_trains'
+require 'view/game/reassign_trains'
 require 'view/game/company'
 require 'view/game/corporation'
 require 'view/game/player'
@@ -37,9 +39,12 @@ module View
           left << h(Dividend) if @current_actions.include?('dividend')
           left << h(Convert) if @current_actions.include?('convert')
           left << h(SwitchTrains) if @current_actions.include?('switch_trains')
-          if @current_actions.include?('buy_train') || @current_actions.include?('scrap_train')
+          left << h(ReassignTrains) if @current_actions.include?('reassign_trains')
+          if @current_actions.include?('buy_train')
             left << h(IssueShares) if @current_actions.include?('sell_shares')
             left << h(BuyTrains)
+          elsif @current_actions.include?('borrow_train')
+            left << h(BorrowTrain)
           elsif @current_actions.include?('sell_shares') && entity.player?
             left << h(CashCrisis)
           elsif @current_actions.include?('buy_shares') || @current_actions.include?('sell_shares')
@@ -60,12 +65,14 @@ module View
           elsif @current_actions.include?('buy_corporation')
             left << h(BuyCorporation)
           end
+          left << h(ScrapTrains) if @current_actions.include?('scrap_train')
           left << h(Loans, corporation: entity) if (%w[take_loan payoff_loan] & @current_actions).any?
 
           if entity.player?
             left << h(Player, player: entity, game: @game)
           elsif entity.operator? && entity.floated?
             left << h(Corporation, corporation: entity)
+            left << h(Corporation, corporation: @step.show_other) if @step.respond_to?(:show_other) && @step.show_other
           elsif (company = entity).company?
             left << h(Company, company: company)
 

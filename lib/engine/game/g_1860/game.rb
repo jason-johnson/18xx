@@ -856,6 +856,9 @@ module Engine
         TILE_LAYS = [{ lay: true, upgrade: true }, { lay: :not_if_upgraded_or_city, upgrade: false }].freeze
 
         GAME_END_CHECK = { stock_market: :current_or, bank: :current_or, custom: :immediate }.freeze
+        GAME_END_REASONS_TEXT = Base::GAME_END_REASONS_TEXT.merge(
+          custom: 'Nationalization complete'
+        )
 
         PAR_RANGE = {
           1 => [74, 100],
@@ -1245,6 +1248,7 @@ module Engine
 
           # restart stock round if in middle of one
           @round.clear_cache!
+          clear_programmed_actions
           @log << 'Restarting Stock Round'
           @round.entities.each(&:unpass!)
           @round = stock_round
@@ -1436,7 +1440,7 @@ module Engine
           "#{reason_map[reason]}#{after_text}"
         end
 
-        def train_help(trains)
+        def train_help(_entity, trains, _routes)
           help = []
 
           if trains.select { |t| t.owner == @depot }.any? && !option_original_insolvency?
@@ -1905,6 +1909,13 @@ module Engine
 
         def bank_sort(entities)
           entities.sort_by(&:name).sort_by { |e| corp_layer(e) }
+        end
+
+        def highlight_token?(token)
+          return false unless token
+          return false unless (corporation = token.corporation)
+
+          corporation.tokens.find_index(token).zero?
         end
       end
     end

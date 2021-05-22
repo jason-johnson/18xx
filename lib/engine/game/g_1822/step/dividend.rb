@@ -60,7 +60,7 @@ module Engine
           end
 
           def find_extra_train(entity)
-            train = entity.trains.find { |t| @game.extra_train?(t) }
+            train = entity.trains.find { |t| @game.extra_train_permanent?(t) }
             return nil unless train
 
             revenue = routes.find { |r| r.train == train }&.revenue || 0
@@ -114,6 +114,8 @@ module Engine
                 'withhold'
               when 'half'
                 'half pay'
+              else
+                raise GameError, "#{action.choice} is an illegal choice"
               end
             @log << "#{current_entity.id} chooses to #{text} with the #{find_extra_train(entity).name} train"
           end
@@ -139,7 +141,6 @@ module Engine
             @game.bank.spend(payout[:corporation], entity) if payout[:corporation].positive?
             payout_shares(entity, revenue + subsidy - payout[:corporation]) if payout[:per_share].positive?
             change_share_price(entity, payout)
-            @game.check_player_loans!
 
             pass!
 

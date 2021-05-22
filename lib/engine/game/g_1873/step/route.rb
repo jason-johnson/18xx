@@ -14,6 +14,12 @@ module Engine
             super
           end
 
+          def setup
+            @round.routes = []
+            @round.maintenance = 0
+            super
+          end
+
           def skip!
             return pass! if current_entity == @game.mhe
 
@@ -24,7 +30,11 @@ module Engine
             end
 
             @game.update_tokens(current_entity, [])
-            return super unless @game.any_mine?(current_entity)
+            return super if !@game.any_mine?(current_entity) && current_entity != @game.qlb
+
+            if current_entity == @game.qlb
+              @log << "QLB only runs local train for #{@game.format_currency(@game.qlb_bonus)}"
+            end
 
             if @game.any_mine?(current_entity)
               @game.update_mine_revenue(@round, current_entity) if @round.routes.empty?
@@ -48,6 +58,8 @@ module Engine
 
             entity = action.entity
             routes = action.routes
+
+            @log << "QLB runs local train for #{@game.format_currency(@game.qlb_bonus)}" if entity == @game.qlb
 
             routes.each do |r|
               @game.use_pool_diesel(r.train, entity) if @game.diesel?(r.train)

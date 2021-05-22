@@ -18,7 +18,6 @@ module View
           h(:p, 'Auto actions allow you to preprogram your moves ahead of time. '\
                 'On asynchronous games this can shorten a game considerably.'),
           h(:p, 'Please note, these are not secret from other players.'),
-          h(:p, 'This feature is presently under development.'),
         ]
 
         if @game.players.find { |p| p.name == @user&.dig('name') }
@@ -131,14 +130,18 @@ module View
                          }),
           ])]
 
-          form = { "corporations": corporations, "options": options }
+          form = { corporations: corporations, options: options }
 
           children << h(:div, [
             h(:p, 'Options:'),
             h(:ul, { style: { 'list-style': 'none' } }, subchildren),
           ])
 
-          subchildren = [render_button(settings ? 'Save' : 'Enable') { enable_merger_pass(form, passable, rounds) }]
+          subchildren = [
+            render_button(
+              settings ? 'Update' : 'Enable'
+            ) { enable_merger_pass(form, passable, rounds) },
+          ]
           subchildren << render_disable(settings) if settings
           children << h(:div, subchildren)
 
@@ -174,8 +177,8 @@ module View
       end
 
       AUTO_ACTIONS_WIKI = 'https://github.com/tobymao/18xx/wiki/Auto-actions'
-      def render_share_choice(form, shares, name, print_name, selected, settings)
-        owned = sender.num_shares_of(shares.first.corporation, ceil: false)
+      def render_share_choice(form, corporation, shares, name, print_name, selected, settings)
+        owned = sender.num_shares_of(corporation, ceil: false)
         default_value = owned + 1
         default_value = settings&.until_condition if selected && settings && settings&.until_condition != 'float'
         input = render_input(
@@ -189,7 +192,7 @@ module View
             value: default_value,
             required: true,
           },
-          input_style: { width: '2.5rem' },
+          input_style: { width: '5rem' },
           container_style: { margin: '0' },
         )
 
@@ -212,7 +215,8 @@ module View
         children << h(:p,
                       'Automatically buy shares in a corporation.'\
                       ' This will deactivate itself if other players do actions that may impact you.'\
-                      ' It will also decative if there are multiple size shares (5%, 10%, 20%) available for purchase.')
+                      ' It will also deactivate if there are multiple share sizes (5%, 10%, 20%)'\
+                      ' available for purchase.')
         children << h(:p,
                       [h(:a, { attrs: { href: AUTO_ACTIONS_WIKI, target: '_blank' } },
                          'Please read this for more details when it will deactivate')])
@@ -277,6 +281,7 @@ module View
           if !selected.ipo_shares.empty? || settings_checked == :from_ipo
             checked = first_radio || settings_checked == :from_ipo
             children << render_share_choice(form,
+                                            selected,
                                             selected.ipo_shares,
                                             'ipo',
                                             @game.ipo_name(selected),
@@ -289,13 +294,14 @@ module View
             checked = first_radio
             checked = (corp_settings&.until_condition != 'float' && corp_settings&.from_market) if corp_settings
             children << render_share_choice(form,
+                                            selected,
                                             @game.share_pool.shares_by_corporation[selected],
                                             'market',
                                             'Market',
                                             checked,
                                             corp_settings)
           end
-          subchildren = [render_button(settings ? 'Save' : 'Enable') { enable_buy_shares(form) }]
+          subchildren = [render_button(settings ? 'Update' : 'Enable') { enable_buy_shares(form) }]
           subchildren << render_disable(settings) if settings
           children << h(:div, subchildren)
 
@@ -323,7 +329,7 @@ module View
                       [h(:a, { attrs: { href: AUTO_ACTIONS_WIKI, target: '_blank' } },
                          'Please read this for more details when it will deactivate')])
 
-        subchildren = [render_button(settings ? 'Save' : 'Enable') { enable_share_pass }]
+        subchildren = [render_button(settings ? 'Update' : 'Enable') { enable_share_pass }]
         subchildren << render_disable(settings) if settings
         children << h(:div, subchildren)
 

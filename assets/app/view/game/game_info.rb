@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'lib/color'
 require 'lib/settings'
 require 'lib/publisher'
 require 'lib/text'
@@ -9,7 +8,6 @@ require 'view/game/game_meta'
 module View
   module Game
     class GameInfo < Snabberb::Component
-      include Lib::Color
       include Lib::Settings
       include Lib::Text
 
@@ -18,6 +16,7 @@ module View
 
       def render
         @depot = @game.depot
+        @dimmed_font_style = { style: { color: convert_hex_to_rgba(color_for(:font), 0.7) } }
 
         case @layout
         when :discarded_trains
@@ -30,10 +29,11 @@ module View
       end
 
       def render_body
-        children = upcoming_trains
+        children = trains
         children.concat(discarded_trains) if @depot.discarded.any?
         children.concat(phases)
         children.concat(timeline) if timeline
+        children.concat(endgame)
         children << h(GameMeta, game: @game)
       end
 
@@ -75,7 +75,9 @@ module View
           extra << h(:td, phase[:corporation_sizes].join(', ')) if corporation_sizes
           extra << h(:td, row_events) if phases_events.any?
 
-          h(:tr, [
+          tr_props = @game.phase.available?(phase[:name]) && phase != current_phase ? @dimmed_font_style : {}
+
+          h(:tr, tr_props, [
             h(:td, (current_phase == phase ? '→ ' : '') + phase[:name]),
             h(:td, @game.info_on_trains(phase)),
             h(:td, phase[:operating_rounds]),
@@ -171,12 +173,11 @@ module View
 
         rust_schedule, obsolete_schedule = rust_obsolete_schedule
         trs = @game.depot.upcoming.group_by(&:name).map do |name, trains|
-          names_to_prices = trains.first.names_to_prices
           events = []
           events << h('div.left', "rusts #{rust_schedule[name].join(', ')}") if rust_schedule[name]
           events << h('div.left', "obsoletes #{obsolete_schedule[name].join(', ')}") if obsolete_schedule[name]
-          tds = [h(:td, names_to_prices.keys.join(', ')),
-                 h("td#{price_str_class}", names_to_prices.values.map { |p| @game.format_currency(p) }.join(', ')),
+          tds = [h(:td, @game.info_train_name(trains.first)),
+                 h("td#{price_str_class}", @game.info_train_price(trains.first)),
                  h('td.right', "×#{trains.size}")]
           tds << h('td.right', events) if events.size.positive?
 
@@ -192,7 +193,7 @@ module View
         ])
       end
 
-      def upcoming_trains
+      def trains
         rust_schedule, obsolete_schedule = rust_obsolete_schedule
 
         show_obsolete_schedule = obsolete_schedule.keys.any?
@@ -200,7 +201,10 @@ module View
         show_available = @depot.upcoming.any?(&:available_on)
         events = []
 
-        rows = @depot.upcoming.group_by(&:name).map do |name, trains|
+        first_train = @depot.upcoming.first
+
+        rows = @depot.trains.reject(&:reserved).group_by(&:sym).map do |sym, trains|
+          remaining = @depot.upcoming.select { |t| t.sym == sym }
           train = trains.first
           discounts = train.discount&.group_by { |_k, v| v }&.map do |price, price_discounts|
             h('span.nowrap', "#{price_discounts.map(&:first).join(', ')} → #{@game.format_currency(price)}")
@@ -209,7 +213,7 @@ module View
           names_to_prices = train.names_to_prices
 
           event_text = []
-          trains.each.with_index do |train2, index|
+          remaining.each.with_index do |train2, index|
             train2.events.each do |event|
               event_name = event['type']
               if @game.class::EVENTS_TEXT[event_name]
@@ -222,15 +226,15 @@ module View
                             else
                               "#{event_name}(on #{ordinal(index + 1)} train)"
                             end
-              event_text << event_name unless event_text.include?(event_name)
             end
           end
           event_text = event_text.flat_map { |e| [h('span.nowrap', e), ', '] }[0..-2]
+          name = (@game.info_available_train(first_train, train) ? '→ ' : '') + @game.info_train_name(train)
 
-          upcoming_train_content = [
-            h(:td, names_to_prices.keys.join(', ')),
-            h("td#{price_str_class}", names_to_prices.values.map { |p| @game.format_currency(p) }.join(', ')),
-            h('td.center', trains.size),
+          train_content = [
+            h(:td, name),
+            h("td#{price_str_class}", @game.info_train_price(train)),
+            h('td.center', "#{remaining.size} / #{trains.size}"),
           ]
 
           show_rusts_inline = true
@@ -251,17 +255,19 @@ module View
             show_rusts_inline = false
           end
 
-          upcoming_train_content << h(:td, obsolete_schedule[name]&.join(', ') || '') if show_obsolete_schedule
-          upcoming_train_content << if show_rusts_inline
-                                      h(:td, rusts&.join(', ') || '')
-                                    else
-                                      h(:td, rusts&.map { |value| h(:div, value) } || '')
-                                    end
+          train_content << h(:td, obsolete_schedule[train.name]&.join(', ') || '') if show_obsolete_schedule
+          train_content << if show_rusts_inline
+                             h(:td, rusts&.join(', ') || '')
+                           else
+                             h(:td, rusts&.map { |value| h(:div, value) } || '')
+                           end
 
-          upcoming_train_content << h(:td, discounts) if show_upgrade
-          upcoming_train_content << h(:td, train.available_on) if show_available
-          upcoming_train_content << h(:td, event_text) if event_text.any?
-          h(:tr, upcoming_train_content)
+          train_content << h(:td, discounts) if show_upgrade
+          train_content << h(:td, train.available_on) if show_available
+          train_content << h(:td, event_text) if event_text.any?
+          tr_props = remaining.empty? ? @dimmed_font_style : {}
+
+          h(:tr, tr_props, train_content)
         end
 
         event_text = events.uniq.map do |sym|
@@ -298,7 +304,7 @@ module View
         upcoming_train_header << h(:th, 'Events') if event_text.any?
 
         [
-          h(:h3, 'Upcoming Trains'),
+          h(:h3, 'Trains'),
           h(:div, { style: { overflowX: 'auto' } }, [
             h(:table, [
               h(:thead, [
@@ -319,10 +325,12 @@ module View
       end
 
       def discarded_trains
-        rows = @depot.discarded.map do |train|
+        rows = @depot.discarded.group_by(&:name).map do |_sym, trains|
+          train = trains.first
           h(:tr, [
             h(:td, train.name),
             h(:td, @game.format_currency(train.price)),
+            h('td.right', trains.size),
           ])
         end
 
@@ -331,6 +339,7 @@ module View
             h(:tr, [
               h(:th, 'Type'),
               h(:th, 'Price'),
+              h(:th, 'Available'),
             ]),
           ]),
           h(:tbody, rows),
@@ -361,10 +370,12 @@ module View
           # the space is nut just a space but a &nbsp in unicode;
           cells << h(:div, cell_props(item[:type], @game.round_counter == index),
                      [h('div.center', item[:value] || ' '), h('div.nowrap', "#{item[:type]} #{item[:name]}")])
-          cells << h(:div, cell_props(:Export), [
-            item[:exportAfterValue] ? h(:div, item[:exportAfterValue]) : nil,
-            train_export,
-          ].compact) if item[:exportAfter]
+          if item[:exportAfter]
+            cells << h(:div, cell_props(:Export), [
+              item[:exportAfterValue] ? h(:div, item[:exportAfterValue]) : nil,
+              train_export,
+            ].compact)
+          end
           cells
         end
 
@@ -397,15 +408,49 @@ module View
             color: font_color,
           },
         }
-        props[:style].merge!(
-          {
-            fontWeight: 'bold',
-            border: "4px solid #{color_for(:red)}",
-            padding: '1px 4px',
-          }
-        ) if current
+        if current
+          props[:style].merge!(
+            {
+              fontWeight: 'bold',
+              border: "4px solid #{color_for(:red)}",
+              padding: '1px 4px',
+            }
+          )
+        end
 
         props
+      end
+
+      def endgame
+        rows = @game.class::GAME_END_CHECK.map do |reason, timing|
+          reason_str = @game.class::GAME_END_REASONS_TEXT[reason]
+          if reason == :bankrupt
+            reason_str = case @game.class::BANKRUPTCY_ENDS_GAME_AFTER
+                         when :one
+                           'Any '
+                         when :all_but_one
+                           'All but one '
+                         end + reason_str
+          end
+          h(:tr, [
+            h(:td, reason_str),
+            h(:td, @game.class::GAME_END_REASONS_TIMING_TEXT[timing]),
+          ])
+        end
+
+        table = h(:table, [
+          h(:thead, [
+            h(:tr, [
+              h(:th, 'Reason'),
+              h(:th, 'Timing'),
+            ]),
+          ]),
+          h(:tbody, rows),
+        ])
+        [
+         h(:h3, 'Reasons for End of Game'),
+         table,
+        ]
       end
     end
   end

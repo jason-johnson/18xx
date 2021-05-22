@@ -58,7 +58,7 @@ module Engine
           'G20' => 'Blackpool',
           'G22' => 'Liverpool',
           'G24' => 'Chester',
-          'G28' => 'Shrewbury',
+          'G28' => 'Shrewsbury',
           'G32' => 'Hereford',
           'G34' => 'Newport',
           'G36' => 'Bristol',
@@ -366,21 +366,21 @@ module Engine
                 'path=a:0,b:_0;path=a:1,b:_1;path=a:2,b:_2;path=a:3,b:_3;path=a:4,b:_4;path=a:5,b:_5;'\
                 'upgrade=cost:20;label=L',
             },
-          '145' =>
+          '768' =>
             {
               'count' => 3,
               'color' => 'brown',
               'code' =>
                 'town=revenue:10;path=a:0,b:_0;path=a:2,b:_0;path=a:3,b:_0;path=a:5,b:_0',
             },
-          '146' =>
+          '767' =>
             {
               'count' => 3,
               'color' => 'brown',
               'code' =>
                 'town=revenue:10;path=a:0,b:_0;path=a:1,b:_0;path=a:2,b:_0;path=a:3,b:_0',
             },
-          '147' =>
+          '769' =>
             {
               'count' => 4,
               'color' => 'brown',
@@ -474,7 +474,7 @@ module Engine
               'count' => 1,
               'color' => 'gray',
               'code' =>
-                'city=revenue:60,slots:2;path=a:1,b:_0;path=a:4,b:_0;label=S',
+                'city=revenue:60,slots:3;path=a:1,b:_0;path=a:4,b:_0;label=S',
             },
           'X15' =>
             {
@@ -633,7 +633,7 @@ module Engine
             name: '5P',
             distance: 5,
             num: 1,
-            price: 0,
+            price: 500,
           },
           {
             name: 'P+',

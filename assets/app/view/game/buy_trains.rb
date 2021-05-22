@@ -65,11 +65,18 @@ module View
 
         must_take_loan = step.must_take_loan?(@corporation) if step.respond_to?(:must_take_loan?)
         if must_take_loan
-          children << h(:div, "#{player.name} does not have enough liquidity to "\
-                              "contribute towards #{@corporation.name} buying a train "\
-                              "from the Depot. #{@corporation.name} must buy a "\
-                              "train from another corporation, or #{player.name} must "\
-                              "take a loan of at least #{@game.format_currency(share_funds_required)}")
+          text = "#{player.name} does not have enough liquidity to "\
+          "contribute towards #{@corporation.name} buying a train "\
+          'from the Depot. '
+
+          if @game.class::ALLOW_TRAIN_BUY_FROM_OTHERS
+            text += "#{@corporation.name} must buy a "\
+            'train from another corporation, or'
+          end
+
+          text += "#{player.name} must " \
+          "take a loan of at least #{@game.format_currency(share_funds_required)}"
+          children << h(:div, text)
         end
 
         if @must_buy_train &&
@@ -91,9 +98,6 @@ module View
       def render
         step = @game.round.active_step
         @corporation ||= step.current_entity
-        if @selected_company&.owner == @corporation
-          @ability = @game.abilities(@selected_company, :train_discount, time: 'buying_train')
-        end
 
         @depot = @game.depot
 
@@ -130,6 +134,7 @@ module View
           children << h(:h3, 'Available Trains')
           children << h(:div, div_props, [
             *from_depot(depot_trains),
+            *render_warranty(depot_trains),
             *other_corp_trains.any? ? other_trains(other_corp_trains) : '',
           ])
         end
@@ -137,13 +142,6 @@ module View
         @slot_checkboxes = {}
         if step.respond_to?(:slot_view) && (view = step.slot_view(@corporation))
           children << send("render_#{view}")
-        end
-
-        scrappable_trains = []
-        scrappable_trains = step.scrappable_trains(@corporation) if step.respond_to?(:scrappable_trains)
-        unless scrappable_trains.empty?
-          children << h(:h3, 'Trains to Scrap')
-          children << h(:div, div_props, scrap_trains(scrappable_trains))
         end
 
         discountable_trains = @game.discountable_trains_for(@corporation)
@@ -207,17 +205,28 @@ module View
             .flat_map do |name, variant|
             price = variant[:price]
             president_assist, _fee = @game.president_assisted_buy(@corporation, train, price)
-            price = @ability&.discounted_price(train, price) || price
+            entity = @corporation
+
+            if @selected_company&.owner == @corporation
+              @game.abilities(@selected_company, :train_discount, time: 'buying_train') do |ability|
+                if ability.trains.include?(train.name)
+                  price = ability.discounted_price(train, price)
+                  entity = @selected_company
+                end
+              end
+            end
+
             price = @game.discard_discount(train, price)
 
             buy_train = lambda do
               process_action(Engine::Action::BuyTrain.new(
-                @ability ? @selected_company : @corporation,
+                entity,
                 train: train,
                 price: price,
                 variant: name,
                 shell: @active_shell,
                 slots: slots,
+                warranties: warranties,
               ))
             end
 
@@ -231,6 +240,34 @@ module View
         end
       end
 
+      def render_warranty(depot_trains)
+        @warranty_input = nil
+        step = @game.round.active_step
+        return if depot_trains.empty? || !step.respond_to?(:warranty_max)
+
+        @warranty_input =
+          h(
+            'input.no_margin',
+            style: {
+              height: '1.2rem',
+              width: '3rem',
+              padding: '0 0 0 0.2rem',
+            },
+            attrs: {
+              type: 'number',
+              min: 0,
+              max: step.warranty_max,
+              value: 0,
+              size: 1,
+            }
+          )
+
+        [h(:div, ''),
+         h(:div, step.warranty_text),
+         h(:div, step.warranty_cost),
+         @warranty_input]
+      end
+
       # return checkbox values for slots (if any)
       def slots
         return if @slot_checkboxes.empty?
@@ -240,24 +277,35 @@ module View
         end.compact
       end
 
+      def warranties
+        return unless @warranty_input
+
+        @warranty_input.JS['elm'].JS['value'].to_i
+      end
+
       def other_trains(other_corp_trains)
         step = @game.round.active_step
         hidden_trains = false
         trains_to_buy = other_corp_trains.flat_map do |other, trains|
           trains.group_by(&:name).flat_map do |name, group|
-            input = h(
-              'input.no_margin',
-              style: {
-                height: '1.2rem',
-                width: '3rem',
-                padding: '0 0 0 0.2rem',
-              },
-              attrs: price_range(group[0]),
-            )
+            fixed_price = step.respond_to?(:fixed_price) && step.fixed_price(group[0])
+            input = if fixed_price
+                      h('div.right', @game.format_currency(fixed_price))
+                    else
+                      h(
+                        'input.no_margin',
+                        style: {
+                          height: '1.2rem',
+                          width: '3rem',
+                          padding: '0 0 0 0.2rem',
+                        },
+                        attrs: price_range(group[0]),
+                      )
+                    end
 
             extra_due_checkbox = nil
             buy_train_click = lambda do
-              price = input.JS['elm'].JS['value'].to_i
+              price = fixed_price || input.JS['elm'].JS['value'].to_i
               extra_due = extra_due_checkbox && Native(extra_due_checkbox).elm.checked
               buy_train = lambda do
                 process_action(Engine::Action::BuyTrain.new(
@@ -271,7 +319,18 @@ module View
               end
 
               if other_owner(other) == @corporation.owner
-                buy_train.call
+                if !@corporation.loans.empty? && !@game.can_pay_interest?(@corporation, -price)
+                  # We don't support nested confirmed, it's unlikely you'll buy from another player.
+                  opts = {
+                    color: :yellow,
+                    click: buy_train,
+                    message: "Buying train at #{@game.format_currency(price)} will cause "\
+                    "#{@corporation.name} to be liquidated.",
+                  }
+                  store(:confirm_opts, opts, skip: false)
+                else
+                  buy_train.call
+                end
               else
                 check_consent(other_owner(other), buy_train)
               end
@@ -342,23 +401,6 @@ module View
         step.respond_to?(:real_owner) ? step.real_owner(other) : other.owner
       end
 
-      def scrap_trains(scrappable_trains)
-        step = @game.round.active_step
-        scrappable_trains.flat_map do |train|
-          scrap = lambda do
-            process_action(Engine::Action::ScrapTrain.new(
-              @corporation,
-              train: train,
-            ))
-          end
-
-          [h(:div, train.name),
-           h('div.nowrap', train.owner.name),
-           h('div.right', step.scrap_info(train)),
-           h('button.no_margin', { on: { click: scrap } }, step.scrap_button_text(train))]
-        end
-      end
-
       def price_range(train)
         step = @game.round.active_step
         if step.must_buy_at_face_value?(train, @corporation)
@@ -392,9 +434,8 @@ module View
         }
 
         rows = @depot.upcoming.group_by(&:name).flat_map do |_, trains|
-          names_to_prices = trains.first.names_to_prices
-          [h(:div, names_to_prices.keys.join(', ')),
-           h(:div, names_to_prices.values.map { |p| @game.format_currency(p) }.join(', ')),
+          [h(:div, @game.info_train_name(trains.first)),
+           h(:div, @game.info_train_price(trains.first)),
            h(:div, trains.size)]
         end
 

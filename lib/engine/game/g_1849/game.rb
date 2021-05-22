@@ -125,6 +125,14 @@ module Engine
 
         BANKRUPTCY_ALLOWED = true
 
+        BANKRUPTCY_ENDS_GAME_AFTER = :all_but_one
+
+        GAME_END_CHECK = { bankrupt: :immediate, bank: :full_or, stock_market: :after_max_operates }.freeze
+
+        GAME_END_REASONS_TIMING_TEXT = Base::GAME_END_REASONS_TIMING_TEXT.merge(
+          after_max_operates: 'After corporation finishes operating'
+        ).freeze
+
         CLOSED_CORP_RESERVATIONS_REMOVED = false
 
         EBUY_OTHER_VALUE = false
@@ -148,29 +156,29 @@ module Engine
         }.freeze
 
         ASSIGNMENT_TOKENS = {
-          'CNM': '/icons/1849/cnm_token.svg',
+          CNM: '/icons/1849/cnm_token.svg',
         }.freeze
 
         EVENTS_TEXT = Base::EVENTS_TEXT.merge(
-          'green_par': ['144 Par Available',
-                        'Corporations may now par at 144 (in addition to 67 and 100)'],
-          'brown_par': ['216 Par Available',
-                        'Corporations may now par at 216 (in addition to 67, 100, and 144)'],
-          'earthquake': ['Messina Earthquake',
-                         'Messina (B14) downgraded to yellow, tokens removed from game.
+          green_par: ['144 Par Available',
+                      'Corporations may now par at 144 (in addition to 67 and 100)'],
+          brown_par: ['216 Par Available',
+                      'Corporations may now par at 216 (in addition to 67, 100, and 144)'],
+          earthquake: ['Messina Earthquake',
+                       'Messina (B14) downgraded to yellow, tokens removed from game.
                         Cannot be upgraded until after next stock round']
         ).freeze
 
         STATUS_TEXT = Base::STATUS_TEXT.merge(
-          'blue_zone': ['Blue Zone Available', 'Corporation share prices can enter the blue zone'],
-          'gray_uses_white': ['White Revenues', 'Gray locations use white revenue values'],
-          'gray_uses_gray': ['Gray Revenues', 'Gray locations use gray revenue values'],
-          'gray_uses_black': ['Black Revenues', 'Gray locations use black revenue values']
+          blue_zone: ['Blue Zone Available', 'Corporation share prices can enter the blue zone'],
+          gray_uses_white: ['White Revenues', 'Gray locations use white revenue values'],
+          gray_uses_gray: ['Gray Revenues', 'Gray locations use gray revenue values'],
+          gray_uses_black: ['Black Revenues', 'Gray locations use black revenue values']
         ).freeze
 
         GRAY_REVENUE_CENTERS =
           {
-            'C1':
+            C1:
               {
                 '4H': 20,
                 '6H': 20,
@@ -179,7 +187,7 @@ module Engine
                 '12H': 40,
                 '16H': 40,
               },
-            'E1':
+            E1:
               {
                 '4H': 20,
                 '6H': 20,
@@ -188,7 +196,7 @@ module Engine
                 '12H': 40,
                 '16H': 40,
               },
-            'C15':
+            C15:
               {
                 '4H': 10,
                 '6H': 10,
@@ -197,7 +205,7 @@ module Engine
                 '12H': 90,
                 '16H': 90,
               },
-            'M9':
+            M9:
               {
                 '4H': 20,
                 '6H': 20,
@@ -208,7 +216,8 @@ module Engine
               },
           }.freeze
 
-        AFG_HEXES = %w[C1 H8 M9 M11 B14].freeze
+        CORP_CHOOSES_HOME = 'AFG'
+        CORP_CHOOSES_HOME_HEXES = %w[C1 H8 M9 M11 B14].freeze
         PORT_HEXES = %w[a12 A5 L14 N8].freeze
         SMS_HEXES = %w[B14 C1 C5 E1 H12 J6 M9 M13].freeze
 
@@ -235,8 +244,10 @@ module Engine
           _, after = game_end_check
           return unless after
 
-          return "Bank Broken : Game Ends at conclusion of
-                #{round_end.short_name} #{turn}.#{operating_rounds}" if after == :full_or
+          if after == :full_or
+            return "Bank Broken : Game Ends at conclusion of #{round_end.short_name} #{turn}.#{operating_rounds}"
+          end
+
           'Company hit max stock value : Game Ends after it operates'
         end
 
@@ -249,7 +260,7 @@ module Engine
         end
 
         def game_end_check
-          return %i[custom after_max_operates] if @max_value_reached
+          return %i[stock_market after_max_operates] if @max_value_reached
 
           return %i[bank full_or] if @bank.broken?
 
@@ -325,9 +336,9 @@ module Engine
         end
 
         def home_token_locations(corporation)
-          raise NotImplementedError unless corporation == afg
+          raise NotImplementedError unless corporation.name == self.class::CORP_CHOOSES_HOME
 
-          AFG_HEXES.map { |coord| hex_by_id(coord) }.select do |hex|
+          self.class::CORP_CHOOSES_HOME_HEXES.map { |coord| hex_by_id(coord) }.select do |hex|
             hex.tile.cities.any? { |city| city.tokenable?(corporation, free: true) }
           end
         end
@@ -387,7 +398,7 @@ module Engine
           super
           corporation.close!
           corporation = reset_corporation(corporation)
-          @afg = corporation if corporation.id == 'AFG'
+          @afg = corporation if corporation.id == self.class::CORP_CHOOSES_HOME
           hex_by_id(corporation.coordinates).tile.add_reservation!(corporation, 0) unless corporation == afg
           @corporations << corporation
           corporation.closed_recently = true
@@ -460,10 +471,9 @@ module Engine
           types = paths.map(&:track).uniq
           raise GameError, 'Can only change track type at station.' if types.include?(:broad) && types.include?(:narrow)
 
-          case
-          when types.include?(:narrow)
+          if types.include?(:narrow)
             :narrow
-          when types.include?(:broad)
+          elsif types.include?(:broad)
             :broad
           else
             :dual
@@ -643,7 +653,7 @@ module Engine
           end
         end
 
-        def upgrades_to?(from, to, special = false)
+        def upgrades_to?(from, to, _special = false, selected_company: nil)
           super && (from.hex.id != 'B14' || @messina_upgradeable)
         end
 
@@ -672,7 +682,7 @@ module Engine
           !corp.ipoed && corp.next_to_par && !corp.closed_recently && corp.slot_open
         end
 
-        def upgrade_cost(tile, hex, entity)
+        def upgrade_cost(tile, hex, entity, _spender)
           return 0 if tile.upgrades.empty?
 
           upgrade = tile.upgrades[0]

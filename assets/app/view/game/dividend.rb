@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'lib/color'
 require 'lib/settings'
 require 'view/game/actionable'
 
@@ -8,7 +7,6 @@ module View
   module Game
     class Dividend < Snabberb::Component
       include Actionable
-      include Lib::Color
       include Lib::Settings
 
       needs :routes, store: true, default: []
@@ -23,7 +21,7 @@ module View
 
         store(:routes, @step.routes, skip: true)
 
-        payout_options = @step.dividend_types.map do |type|
+        payout_options = options.keys.map do |type|
           option = options[type]
           text =
             case type
@@ -34,7 +32,7 @@ module View
             when :half
               'Half Pay'
             else
-              type
+              @step.respond_to?(:dividend_name) ? @step.dividend_name(type) : type
             end
 
           corp_income = option[:corporation] + option[:divs_to_corporation]
@@ -101,11 +99,13 @@ module View
             ' to cover the remaining unpaid interest'
         end
         penalties = h(:span)
-        penalties = h(:div, [
-          h(:h3, 'Penalties'),
-          h(:p, corporation_penalty),
-          h(:p, player_penalty),
-        ]) if corporation_interest_penalty?(entity) || player_interest_penalty?(entity)
+        if corporation_interest_penalty?(entity) || player_interest_penalty?(entity)
+          penalties = h(:div, [
+            h(:h3, 'Penalties'),
+            h(:p, corporation_penalty),
+            h(:p, player_penalty),
+          ])
+        end
 
         h(:div, div_props, [
           penalties,
@@ -136,7 +136,7 @@ module View
       end
 
       def render_variable(entity)
-        max = (@step.variable_max(entity) / entity.total_shares).to_i
+        max = (@step.variable_max(entity) / @step.variable_share_multiplier(entity)).to_i
 
         input = h(:input,
                   props: {
@@ -145,20 +145,23 @@ module View
                     max: max,
                     type: 'number',
                     size: max.to_s.size,
+                    step: @step.variable_input_step,
                   })
 
         h(:div,
           [
             h(:h3, { style: { margin: '0.5rem 0 0.2rem 0' } }, 'Pay Dividends'),
             @step.help_str(max),
-            input,
-            h(:button, { on: { click: -> { create_dividend(input) } } }, 'Pay Dividend'),
+            h(:div, [
+              input,
+              h(:button, { on: { click: -> { create_dividend(input) } } }, 'Pay Dividend'),
+            ]),
             dividend_chart,
         ])
       end
 
       def create_dividend(input)
-        amount = input.JS['elm'].JS['value'].to_i * @step.current_entity.total_shares
+        amount = input.JS['elm'].JS['value'].to_i * @step.variable_share_multiplier(@step.current_entity)
         process_action(Engine::Action::Dividend.new(@step.current_entity, kind: 'variable', amount: amount))
       end
 

@@ -32,6 +32,11 @@ module Engine
         can_token_after_teleport?
       end
 
+      def round_state
+        state = @round.respond_to?(:teleported) ? {} : { teleported: nil }
+        state.merge(super)
+      end
+
       def can_token_after_teleport?
         @round.teleported && !available_tokens(@round.teleported).empty?
       end
@@ -77,7 +82,7 @@ module Engine
 
       def available_tokens(entity)
         ability = ability(entity)
-        return super unless ability&.type == :token && ability.extra
+        return super unless ability&.type == :token && ability.extra_action
 
         [Engine::Token.new(entity.owner)]
       end

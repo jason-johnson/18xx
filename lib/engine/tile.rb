@@ -15,10 +15,10 @@ module Engine
     include Config::Tile
 
     attr_accessor :blocks_lay, :hex, :icons, :index, :legal_rotations, :location_name,
-                  :name, :opposite, :reservations, :upgrades
-    attr_reader :borders, :cities, :color, :edges, :junction, :nodes, :labels,
+                  :name, :opposite, :reservations, :upgrades, :color
+    attr_reader :borders, :cities, :edges, :junction, :nodes, :labels,
                 :parts, :preprinted, :rotation, :stops, :towns, :offboards, :blockers,
-                :city_towns, :unlimited, :stubs, :partitions, :id, :frame
+                :city_towns, :unlimited, :stubs, :partitions, :id, :frame, :hidden
 
     ALL_EDGES = [0, 1, 2, 3, 4, 5].freeze
 
@@ -66,7 +66,7 @@ module Engine
       when 'path'
         params = params.map do |k, v|
           case k
-          when 'terminal', 'a_lane', 'b_lane'
+          when 'terminal', 'a_lane', 'b_lane', 'ignore'
             [k, v]
           when 'lanes'
             [k, v.to_i]
@@ -85,7 +85,8 @@ module Engine
         Part::Path.make_lanes(params['a'], params['b'], terminal: params['terminal'],
                                                         lanes: params['lanes'], a_lane: params['a_lane'],
                                                         b_lane: params['b_lane'],
-                                                        track: params['track'])
+                                                        track: params['track'],
+                                                        ignore: params['ignore'])
       when 'city'
         city = Part::City.new(params['revenue'],
                               slots: params['slots'],
@@ -94,6 +95,7 @@ module Engine
                               visit_cost: params['visit_cost'],
                               route: params['route'],
                               format: params['format'],
+                              boom: params['boom'],
                               loc: params['loc'])
         cache << city
         city
@@ -105,6 +107,9 @@ module Engine
                               route: params['route'],
                               format: params['format'],
                               loc: params['loc'],
+                              boom: params['boom'],
+                              style: params['style'],
+                              double: params['double'],
                               to_city: params['to_city'])
         cache << town
         town
@@ -130,7 +135,7 @@ module Engine
       when 'label'
         Part::Label.new(params)
       when 'upgrade'
-        Part::Upgrade.new(params['cost'], params['terrain']&.split('|'))
+        Part::Upgrade.new(params['cost'], params['terrain']&.split('|'), params['size'])
       when 'border'
         Part::Border.new(params['edge'], params['type'], params['cost'])
       when 'junction'
@@ -192,6 +197,7 @@ module Engine
       @unlimited = opts[:unlimited] || false
       @labels = []
       @opposite = nil
+      @hidden = opts[:hidden] || false
       @id = "#{@name}-#{@index}"
 
       separate_parts
@@ -208,7 +214,8 @@ module Engine
                index: @index + 1,
                location_name: @location_name,
                reservation_blocks: @reservation_blocks,
-               unlimited: @unlimited)
+               unlimited: @unlimited,
+               hidden: @hidden)
     end
 
     def <=>(other)
@@ -446,7 +453,7 @@ module Engine
     end
 
     def revenue_to_render
-      @revenue_to_render ||= @stops.map(&:revenue_to_render)
+      @revenue_to_render ||= @revenue_stops.map(&:revenue_to_render)
     end
 
     # Used to set label for a recently placed tile
@@ -528,6 +535,9 @@ module Engine
       @nodes = @paths.flat_map(&:nodes).uniq
       @stops = @paths.flat_map(&:stops).uniq
       @edges = @paths.flat_map(&:edges).uniq
+
+      # allow offboards w/o paths to render
+      @revenue_stops = (@stops + @offboards).uniq
 
       @edges.each { |e| e.tile = self }
     end

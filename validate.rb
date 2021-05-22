@@ -13,13 +13,15 @@ $count = 0
 $total = 0
 $total_time = 0
 
-def run_game(game, actions = nil)
+def run_game(game, actions = nil, strict: false)
   actions ||= game.actions.map(&:to_h)
   data={'id':game.id, 'title': game.title, 'status':game.status}
+
+  $total += 1
+  time = Time.now
+  engine = Engine::Game.load(game, strict: strict)
   begin
-    $total += 1
-    time = Time.now
-    engine = Engine::Game.load(game).maybe_raise!
+    engine.maybe_raise!    
 
     time = Time.now - time
     $total_time += time
@@ -29,6 +31,7 @@ def run_game(game, actions = nil)
     data['result']=engine.result
   rescue Exception => e # rubocop:disable Lint/RescueException
     $count += 1
+    data['last_action']=engine.last_processed_action
     data['finished']=false
     #data['stack']=e.backtrace
     data['exception']=e
@@ -36,7 +39,7 @@ def run_game(game, actions = nil)
   data
 end
 
-def validate_all(*titles, game_ids: nil)
+def validate_all(*titles, game_ids: nil, strict: false)
   $count = 0
   $total = 0
   $total_time = 0
@@ -54,7 +57,7 @@ def validate_all(*titles, game_ids: nil)
       where_args2[:title] = titles if titles.any?
       games = Game.eager(:user, :players, :actions).where(**where_args2).all
       _ = games.each do |game|
-        data[game.id]=run_game(game)
+        data[game.id]=run_game(game, strict: strict)
       end
       page.clear
     end
@@ -110,6 +113,25 @@ def validate_json(filename, strict: false)
     puts game.broken_action.to_h
   end
   game.maybe_raise!
+end
+
+def validate_json_auto(filename, strict: false)
+  # Validate the json, and try and add auto actions at the end
+  data = JSON.parse(File.read(filename))
+  rungame = Engine::Game.load(data, strict: strict).maybe_raise!
+  rungame.maybe_raise!
+  actions = rungame.class.filtered_actions(data['actions']).first
+
+  action = actions.last
+
+  # Process game to previous action
+  auto_game = Engine::Game.load(data, at_action: action['id'] - 1)
+
+  # Add the action but without the auto actions
+  clone = action.dup
+  clone.delete('auto_actions')
+  auto_game.process_action(clone, add_auto_actions: true)
+  auto_game.maybe_raise!
 end
 
 def pin_games(pin_version, game_ids)

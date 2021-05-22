@@ -16,13 +16,16 @@ class Api
 
         # POST '/api/user/'
         r.is do
-          halt(400, 'Invalid email address') unless /^[^@\s]+@[^@\s]+\.[^@\s]+$/.match?(r['email'])
-
           params = {
             name: r['name'],
             email: r['email'],
             password: r['password'],
-            settings: { notifications: r['notifications'] },
+            settings: {
+              notifications: r['notifications'],
+              webhook: r['webhook'],
+              webhook_url: r['webhook_url'],
+              webhook_user_id: r['webhook_user_id'],
+            },
           }.reject { |_, v| v.empty? }
 
           login_user(User.create(params))

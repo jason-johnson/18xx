@@ -66,6 +66,8 @@ module Engine
           players_sold: Hash.new { |h, k| h[k] = {} },
           # Actions taken by the player on this turn
           current_actions: [],
+          # If the player has already bought some share from IPO
+          bought_from_ipo: false,
           # What the player did last turn
           players_history: Hash.new { |h, k| h[k] = Hash.new { |h2, k2| h2[k2] = [] } },
         }
@@ -82,6 +84,7 @@ module Engine
         @round.players_history[current_entity].clear
 
         @round.current_actions = []
+        @round.bought_from_ipo = false
       end
 
       # Returns if a share can be bought via a normal buy actions
@@ -98,15 +101,16 @@ module Engine
       end
 
       def must_sell?(entity)
-        return false if @game.can_hold_above_limit?(entity)
         return false unless can_sell_any?(entity)
+        return true if @game.num_certs(entity) > @game.cert_limit
 
-        @game.num_certs(entity) > @game.cert_limit ||
-          !@game.corporations.all? { |corp| corp.holding_ok?(entity) }
+        !@game.can_hold_above_corp_limit?(entity) &&
+          @game.corporations.any? { |corp| !corp.holding_ok?(entity) }
       end
 
       def can_sell?(entity, bundle)
         return unless bundle
+        return false if entity != bundle.owner
 
         corporation = bundle.corporation
 
@@ -146,6 +150,7 @@ module Engine
       end
 
       def process_buy_shares(action)
+        @round.bought_from_ipo = true if action.bundle.owner.corporation?
         buy_shares(action.entity, action.bundle, swap: action.swap)
         track_action(action, action.bundle.corporation)
       end
@@ -162,7 +167,7 @@ module Engine
         raise GameError, "#{corporation.name} cannot be parred" unless @game.can_par?(corporation, entity)
 
         @game.stock_market.set_par(corporation, share_price)
-        share = corporation.shares.first
+        share = corporation.ipo_shares.first
         buy_shares(entity, share.to_bundle)
         @game.after_par(corporation)
         track_action(action, action.corporation)
@@ -172,14 +177,19 @@ module Engine
         super
         if @round.current_actions.any?
           @round.pass_order.delete(current_entity)
-          current_entity.unpass!
+          current_entity&.unpass!
         else
           @round.pass_order |= [current_entity]
-          current_entity.pass!
+          current_entity&.pass!
         end
       end
 
-      def can_buy_multiple?(_entity, corporation, _owner)
+      def can_buy_multiple?(_entity, corporation, owner)
+        if @game.multiple_buy_only_from_market?
+          return false unless owner.share_pool?
+          return false if @round.bought_from_ipo
+        end
+
         corporation.buy_multiple? &&
          @round.current_actions.none? { |x| x.is_a?(Action::Par) } &&
          @round.current_actions.none? { |x| x.is_a?(Action::BuyShares) && x.bundle.corporation != corporation }
@@ -310,7 +320,7 @@ module Engine
         (corporation.owner.percent_of(corporation)) >= corporation_secure_percent
       end
 
-      def action_is_shenanigan?(entity, action, corporation, share_to_buy)
+      def action_is_shenanigan?(entity, other_entity, action, corporation, share_to_buy)
         corp_buying = share_to_buy&.corporation
 
         case action
@@ -324,7 +334,7 @@ module Engine
             return if corporation_secure?(corporation) # Don't care...
 
             unless corporation == corp_buying
-              return "#{action.entity.player.name} bought on corporation #{corporation.name} and is unsecure"
+              return "#{other_entity.name} bought on corporation #{corporation.name} and is unsecure"
             end
 
             percentage = corporation.owner.percent_of(corporation) + share_to_buy.percent
@@ -364,7 +374,7 @@ module Engine
 
           corporations.each do |corporation, actions|
             actions.each do |action|
-              reason = action_is_shenanigan?(entity, action, corporation, share_to_buy)
+              reason = action_is_shenanigan?(entity, other_entity, action, corporation, share_to_buy)
               return reason if reason
             end
           end
@@ -391,13 +401,13 @@ module Engine
 
       def activate_program_buy_shares(entity, program)
         available_actions = actions(entity)
+        corporation = program.corporation
         if available_actions.include?('buy_shares')
-          corporation = program.corporation
-
           # check if end condition met
           if program.until_condition == 'float'
-            return [Action::ProgramDisable.new(entity,
-                                               reason: "#{corporation.name} is floated")] if corporation.floated?
+            if corporation.floated?
+              return [Action::ProgramDisable.new(entity, reason: "#{corporation.name} is floated")]
+            end
           elsif entity.num_shares_of(corporation, ceil: false) >= program.until_condition
             return [Action::ProgramDisable.new(entity,
                                                reason: "#{program.until_condition} share(s) bought in "\
@@ -429,7 +439,11 @@ module Engine
 
           [Action::BuyShares.new(entity, shares: share)]
         elsif bought? && available_actions.include?('pass')
-          # Buy-then-Sell games need the pass
+          # If the corporation has just been floated, don't pass
+          # as some players like to sell the last share immediately
+          return if program.until_condition == 'float' && corporation.floated?
+
+          # Buy-then-Sell games need the pass.
           [Action::Pass.new(entity)]
         end
       end

@@ -25,6 +25,12 @@ module Engine
           super
         end
 
+        def get_tile_lay_corporation(entity)
+          return entity if entity.id == @game.class::COMPANY_HSBC
+
+          super
+        end
+
         def legal_tile_rotation?(entity, hex, tile)
           # We will remove a town from the white S tile, this meaning we will not follow the normal path upgrade rules
           if hex.name == @game.class::UPGRADABLE_S_HEX_NAME &&
@@ -51,7 +57,7 @@ module Engine
                .reject(&:blocks_lay)
         end
 
-        def remove_border_calculate_cost!(tile, entity)
+        def remove_border_calculate_cost!(tile, entity, spender)
           hex = tile.hex
           types = []
           total_cost = tile.borders.dup.sum do |border|
@@ -63,7 +69,7 @@ module Engine
 
             tile.borders.delete(border)
             types << border.type
-            cost - border_cost_discount(entity, border, hex)
+            cost - border_cost_discount(entity, spender, border, cost, hex)
           end
 
           # If we use the Glasgow and South-Western Railway private, it removes the border cost of one estuary crossing
@@ -81,14 +87,8 @@ module Engine
           [total_cost, types]
         end
 
-        def upgraded_track(action)
-          @round.upgraded_track = upgraded_track?(action)
-        end
-
-        def upgraded_track?(action)
-          # London yellow tile counts as an upgrade
-          tile_color = action.tile.color
-          tile_color != :yellow || (tile_color == :yellow && action.hex.name == @game.class::LONDON_HEX)
+        def upgraded_track?(from, _to, _hex)
+          from.color != :white
         end
       end
     end
